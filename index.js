@@ -37,6 +37,7 @@ var SVG_TAGS = [
 ]
 
 module.exports = function yoYoify (file, opts) {
+  opts = opts || {}
   if (/\.json$/.test(file)) return through()
   var bufs = []
   var viewVariables = []
@@ -53,7 +54,7 @@ module.exports = function yoYoify (file, opts) {
   }
   function walk (node) {
     if (isSupportedView(node)) {
-      if (node.arguments[0].value === 'bel') {
+      if (node.arguments[0].value === 'bel' && !opts.leaveBel) {
         // Only 0 out bel as yo-yo still needs yo.update()
         node.update('{}')
       }
