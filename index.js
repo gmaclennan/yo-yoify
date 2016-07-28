@@ -16,6 +16,7 @@ var BOOL_PROPS = {
   indeterminate: 1,
   readonly: 1,
   required: 1,
+  selected: 1,
   willvalidate: 1
 }
 var SVG_TAGS = [
@@ -35,6 +36,7 @@ var SVG_TAGS = [
   'set', 'stop', 'switch', 'symbol', 'text', 'textPath', 'title', 'tref',
   'tspan', 'use', 'view', 'vkern'
 ]
+var onloadElementId = 0
 
 module.exports = function yoYoify (file, opts) {
   opts = opts || {}
@@ -46,9 +48,14 @@ module.exports = function yoYoify (file, opts) {
     bufs.push(buf)
     next()
   }
-  function end () {
+  function end (cb) {
     var src = Buffer.concat(bufs).toString('utf8')
-    var res = falafel(src, { ecmaVersion: 6 }, walk).toString()
+    var res
+    try {
+      res = falafel(src, { ecmaVersion: 6 }, walk).toString()
+    } catch (err) {
+      return cb(err)
+    }
     this.push(res)
     this.push(null)
   }
@@ -74,6 +81,7 @@ module.exports = function yoYoify (file, opts) {
 
 function processNode (node) {
   var args = [ node.quasis.map(cooked) ].concat(node.expressions.map(expr))
+  var needsOnLoad = false
 
   var resultArgs = []
   var argCount = 0
@@ -96,6 +104,35 @@ function processNode (node) {
       res.push(`var ${elname} = document.createElement(${JSON.stringify(tag)})`)
     }
 
+    // If adding onload events
+    if (props.onload || props.onunload) {
+      var onloadParts = getSourceParts(props.onload)
+      var onunloadParts = getSourceParts(props.onunload)
+      var onloadCode = ''
+      var onunloadCode = ''
+      var elementIdentifier = JSON.stringify('o' + onloadElementId)
+      onloadElementId += 1
+      if (onloadParts && onloadParts.arg !== '') {
+        onloadCode = `args[${argCount}](${elname})`
+        resultArgs.push(onloadParts.arg)
+        argCount++
+      }
+      if (onunloadParts && onunloadParts.arg !== '') {
+        onunloadCode = `args[${argCount}](${elname})`
+        resultArgs.push(onunloadParts.arg)
+        argCount++
+      }
+      res.push(`var args = arguments
+      onload(${elname}, function bel_onload () {
+        ${onloadCode}
+      }, function bel_onunload () {
+        ${onunloadCode}
+      }, ${elementIdentifier})`)
+      needsOnLoad = true
+      delete props.onload
+      delete props.onunload
+    }
+
     function addAttr (to, key, val) {
       // Normalize className
       if (key.toLowerCase() === 'classname') {
@@ -105,12 +142,21 @@ function processNode (node) {
       if (p === 'htmlFor') {
         p = 'for'
       }
+      var p = JSON.stringify(key)
       // If a property is boolean, set itself to the key
       if (BOOL_PROPS[key]) {
-        if (val === 'true') val = key
-        else if (val === 'false') return
+        if (val.slice(0, 9) === 'arguments') {
+          if (namespace) {
+            res.push(`if (${val}) ${to}.setAttributeNS(null, ${p}, ${p})`)
+          } else {
+            res.push(`if (${val}) ${to}.setAttribute(${p}, ${p})`)
+          }
+          return
+        } else {
+          if (val === 'true') val = key
+          else if (val === 'false') return
+        }
       }
-      var p = JSON.stringify(key)
       if (key.slice(0, 2) === 'on') {
         res.push(`${to}[${p}] = ${val}`)
       } else {
@@ -177,7 +223,9 @@ function processNode (node) {
   var src = getSourceParts(res)
   if (src && src.src) {
     var params = resultArgs.join(',')
+    // TODO: This should use the on-load version of choo/yo-yo/bel
     node.parent.update(`(function () {
+      ${needsOnLoad ? `var onload = require('${require.resolve('on-load')}')` : ''}
       var ac = require('${path.resolve(__dirname, 'lib', 'appendChild.js')}')
       ${src.src}
       return ${src.name}

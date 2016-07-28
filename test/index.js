@@ -105,3 +105,45 @@ test('choo and friends', function (t) {
     t.end()
   })
 })
+
+test('emits error for syntax error', function (t) {
+  var src = `var bel = require('bel')
+  module.exports = function (data) {
+    var className = ('test' + ) // <--- HERE'S A SYNTAX ERROR
+    return bel\`<div class="\${className}">
+      <h1>\${data}</h1>
+    </div>\`
+  }`
+  fs.writeFileSync(FIXTURE, src)
+  var b = browserify(FIXTURE, {
+    browserField: false,
+    transform: path.join(__dirname, '..')
+  })
+  b.bundle(function (err, src) {
+    t.ok(err)
+    t.end()
+  })
+})
+
+test('onload/onunload', function (t) {
+  t.plan(4)
+  var src = `var bel = require('bel')
+  var el = bel\`<div onload=\${function (e) {
+    console.log('onload', e)
+  }} onunload=\${function (e) {
+    console.log('onunload', e)
+  }}>bel</div>\``
+  fs.writeFileSync(FIXTURE, src)
+  var b = browserify(FIXTURE, {
+    transform: path.join(__dirname, '..')
+  })
+  b.bundle(function (err, src) {
+    fs.unlinkSync(FIXTURE)
+    t.ifError(err, 'no error')
+    var result = src.toString()
+    t.ok(result.indexOf('onload(bel0, function bel_onload () {' !== -1), 'adds onload event to element')
+    t.ok(result.indexOf('function bel_onunload () {' !== -1), 'adds onunload event to element')
+    t.ok(result.indexOf(', "o0")' !== -1), 'it identified the element')
+    t.end()
+  })
+})
