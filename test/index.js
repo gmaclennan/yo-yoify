@@ -7,13 +7,7 @@ var FIXTURE = path.join(__dirname, 'fixture.js')
 
 test('works', function (t) {
   t.plan(4)
-  var src = `var bel = require('bel')
-  module.exports = function (data) {
-    var className = 'test'
-    return bel\`<div class="\${className}">
-      <h1>\${data}</h1>
-    </div>\`
-  }`
+  var src = 'var bel = require(\'bel\')\n  module.exports = function (data) {\n    var className = \'test\'\n    return bel`<div class="${className}">\n      <h1>${data}</h1>\n    </div>`\n  }'
   fs.writeFileSync(FIXTURE, src)
   var b = browserify(FIXTURE, {
     browserField: false,
@@ -32,9 +26,7 @@ test('works', function (t) {
 
 test('strings + template expressions', function (t) {
   t.plan(2)
-  var src = `var bel = require('bel')
-  var className = 'test'
-  var el = bel\`<div class="before \${className} after"><div>\``
+  var src = 'var bel = require(\'bel\')\n  var className = \'test\'\n  var el = bel`<div class="before ${className} after"><div>`'
   fs.writeFileSync(FIXTURE, src)
   var b = browserify(FIXTURE, {
     browserField: false,
@@ -51,8 +43,7 @@ test('strings + template expressions', function (t) {
 
 test('append children in the correct order', function (t) {
   t.plan(2)
-  var src = `var bel = require('bel')
-  var el = bel\`<div>This is a <a href="#">test</a> to ensure <strong>strings</strong> get appended in the correct order.</div>\``
+  var src = 'var bel = require(\'bel\')\n  var el = bel`<div>This is a <a href="#">test</a> to ensure <strong>strings</strong> get appended in the correct order.</div>`'
   fs.writeFileSync(FIXTURE, src)
   var b = browserify(FIXTURE, {
     browserField: false,
@@ -68,10 +59,27 @@ test('append children in the correct order', function (t) {
   })
 })
 
+test('multiple values on single attribute', function (t) {
+  t.plan(4)
+  var src = 'var bel = require(\'bel\')\n  var a = \'testa\'\n  var b = \'testb\'\n  bel`<div class="${a} ${b}">`'
+  fs.writeFileSync(FIXTURE, src)
+  var b = browserify(FIXTURE, {
+    transform: path.join(__dirname, '..')
+  })
+  b.bundle(function (err, src) {
+    fs.unlinkSync(FIXTURE)
+    t.ifError(err, 'no error')
+    var result = src.toString()
+    t.ok(result.indexOf('arguments[0]') !== -1, 'first argument')
+    t.ok(result.indexOf('arguments[1]') !== -1, 'second argument')
+    t.ok(result.indexOf('(a,b)') !== -1, 'calling with both variables')
+    t.end()
+  })
+})
+
 test('svg', function (t) {
   t.plan(2)
-  var src = `var bel = require('bel')
-  var el = bel\`<svg><line /></svg>\``
+  var src = 'var bel = require(\'bel\')\n  var el = bel`<svg><line /></svg>`'
   fs.writeFileSync(FIXTURE, src)
   var b = browserify(FIXTURE, {
     browserField: false,
@@ -86,12 +94,27 @@ test('svg', function (t) {
   })
 })
 
+test('xlink:href', function (t) {
+  t.plan(2)
+  var src = 'var bel = require(\'bel\')\n  var el = bel`<use xlink:href=\'#cat\'/>`'
+  fs.writeFileSync(FIXTURE, src)
+  var b = browserify(FIXTURE, {
+    browserField: false,
+    transform: path.join(__dirname, '..')
+  })
+  b.bundle(function (err, src) {
+    fs.unlinkSync(FIXTURE)
+    t.iferror(err, 'no error')
+    var result = src.toString()
+    var match = result.indexOf('setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", "#cat")') !== -1
+    t.ok(match, 'created namespaced xlink:href attribute')
+    t.end()
+  })
+})
+
 test('choo and friends', function (t) {
   t.plan(3)
-  var src = `const choo = require('choo')
-  const bel = require('bel')
-  const el1 = choo.view\`<button>choo choo</button>\`
-  const el2 = bel\`<button>bel bel</button>\``
+  var src = 'const choo = require(\'choo\')\n  const bel = require(\'bel\')\n  const el1 = choo.view`<button>choo choo</button>`\n  const el2 = bel`<button>bel bel</button>`'
   fs.writeFileSync(FIXTURE, src)
   var b = browserify(FIXTURE, {
     transform: path.join(__dirname, '..')
@@ -107,13 +130,7 @@ test('choo and friends', function (t) {
 })
 
 test('emits error for syntax error', function (t) {
-  var src = `var bel = require('bel')
-  module.exports = function (data) {
-    var className = ('test' + ) // <--- HERE'S A SYNTAX ERROR
-    return bel\`<div class="\${className}">
-      <h1>\${data}</h1>
-    </div>\`
-  }`
+  var src = 'var bel = require(\'bel\')\n  module.exports = function (data) {\n    var className = (\'test\' + ) // <--- HERE\'S A SYNTAX ERROR\n    return bel`<div class="${className}">\n      <h1>${data}</h1>\n    </div>`\n  }'
   fs.writeFileSync(FIXTURE, src)
   var b = browserify(FIXTURE, {
     browserField: false,
@@ -127,12 +144,7 @@ test('emits error for syntax error', function (t) {
 
 test('onload/onunload', function (t) {
   t.plan(4)
-  var src = `var bel = require('bel')
-  var el = bel\`<div onload=\${function (e) {
-    console.log('onload', e)
-  }} onunload=\${function (e) {
-    console.log('onunload', e)
-  }}>bel</div>\``
+  var src = 'var bel = require(\'bel\')\n  var el = bel`<div onload=${function (e) {\n    console.log(\'onload\', e)\n  }} onunload=${function (e) {\n    console.log(\'onunload\', e)\n  }}>bel</div>`'
   fs.writeFileSync(FIXTURE, src)
   var b = browserify(FIXTURE, {
     transform: path.join(__dirname, '..')
